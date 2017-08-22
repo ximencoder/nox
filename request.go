@@ -1,21 +1,31 @@
 package nox
 
 import (
+	"bytes"
 	"io"
+	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
-	"io/ioutil"
 )
 
 type Request struct {
-	url         string
-	method      string
-	header      http.Header
-	params      url.Values
-	body        io.Reader
-	Client      *http.Client
-	cookies     []*http.Cookie
+	url     string
+	method  string
+	header  http.Header
+	params  url.Values
+	body    io.Reader
+	Client  *http.Client
+	cookies []*http.Cookie
+	file    *file
+}
+
+type file struct {
+	name     string
+	filename string
+	path     string
 }
 
 func NewRequest(method, urlString string) *Request {
@@ -64,11 +74,19 @@ func (this *Request) SetParams(params url.Values) {
 	this.params = params
 }
 
+func (this *Request) AddFile(name, filename, path string) {
+	this.file = &file{name, filename, path}
+}
+
+func (this *Request) RemoveFile() {
+	this.file = nil
+}
+
 func (this *Request) AddCookie(cookie *http.Cookie) {
 	this.cookies = append(this.cookies, cookie)
 }
 
-func (this *Request) Exec() (*Response) {
+func (this *Request) Exec() *Response {
 	var req *http.Request
 	var err error
 	var body io.Reader
@@ -81,6 +99,37 @@ func (this *Request) Exec() (*Response) {
 	} else {
 		if this.body != nil {
 			body = this.body
+		} else if this.file != nil {
+			uploadFile, err := os.Open(this.file.path)
+			if err != nil {
+				return &Response{nil, nil, err}
+			}
+			defer uploadFile.Close()
+
+			bodyByte := &bytes.Buffer{}
+			writer := multipart.NewWriter(bodyByte)
+			part, err := writer.CreateFormFile(this.file.name, this.file.filename)
+			if err != nil {
+				return &Response{nil, nil, err}
+			}
+			_, err = io.Copy(part, uploadFile)
+			if err != nil {
+				return &Response{nil, nil, err}
+			}
+
+			for key, values := range this.params {
+				for _, value := range values {
+					writer.WriteField(key, value)
+				}
+			}
+
+			err = writer.Close()
+			if err != nil {
+				return &Response{nil, nil, err}
+			}
+
+			this.SetContentType(writer.FormDataContentType())
+			body = bodyByte
 		} else if this.params != nil {
 			body = strings.NewReader(this.params.Encode())
 		}
