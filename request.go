@@ -150,10 +150,12 @@ func (this *Request) Exec() *Response {
 	}
 
 	rep, err := this.Client.Do(req)
+	if rep != nil {
+		defer rep.Body.Close()
+	}
 	if err != nil {
 		return &Response{nil, nil, err}
 	}
-	defer rep.Body.Close()
 
 	data, err := ioutil.ReadAll(rep.Body)
 	return &Response{rep, data, err}
