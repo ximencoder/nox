@@ -149,14 +149,14 @@ func (this *Request) Exec() *Response {
 		req.AddCookie(cookie)
 	}
 
-	rep, err := this.Client.Do(req)
-	if rep != nil {
-		defer rep.Body.Close()
+	resp, err := this.Client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
 	}
 	if err != nil {
 		return &Response{nil, nil, err}
 	}
 
-	data, err := ioutil.ReadAll(rep.Body)
-	return &Response{rep, data, err}
+	data, err := ioutil.ReadAll(resp.Body)
+	return &Response{resp, data, err}
 }
